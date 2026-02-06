@@ -66,17 +66,22 @@ pub fn ewe_04_test() {
 
 pub fn ewe_05_test() {
   let assert Ok(_started) = app.start(8084)
+
+  // Создаем запрос по ендпоинту "topic/[room_name]/ws"
   let assert Ok(req) = request.to("http://localhost:8084/topic/test_room/ws")
 
+  // WebSocket клиент должен запуститься, получаем PID и subject клиента.
   let assert Ok(actor.Started(pid:, data: client)) =
     stratus.new(req, Nil)
     |> stratus.on_message(fn(state, message, conn) {
       case message {
+        // При пользовательском сообщение, отправляем фрейм по сокету.
         stratus.User(text) -> {
           assert stratus.send_text_message(conn, text) == Ok(Nil)
           stratus.continue(state)
         }
         _ -> {
+          // Любое другое сообщение - ехо фрейм, должен быть текстовым фреймом.
           assert message == stratus.Text("Wibble Wobble")
           stratus.stop()
         }
@@ -84,9 +89,11 @@ pub fn ewe_05_test() {
     })
     |> stratus.start
 
+  // После запуска клиента, отправляем текст.
   stratus.to_user_message("Wibble Wobble")
   |> process.send(client, _)
 
+  // Ждём когда процесс клиента завершится с нормальным исходом.
   let assert Ok(process.ProcessDown(_monitor, _pid, process.Normal)) =
     process.new_selector()
     |> process.select_specific_monitor(process.monitor(pid), function.identity)
@@ -128,13 +135,18 @@ pub fn ewe_08_test() {
 }
 
 pub fn ewe_09_test() {
+  // Чтобы краш процесса не передавался от детей к родительским процессам, его нужно
+  // поймать.
   process.trap_exits(True)
 
+  // Процесс не сможет корректно инициализироваться так как Erlang пакет по работе с
+  // сокетами не сможет обработать невалидные пути к сертификатам.
   let assert Error(actor.InitFailed(..)) =
     ewe.new(fn(_req) {
       response.new(200)
       |> response.set_body(ewe.Empty)
     })
+    // Указываем пустые пути к сертификатам.
     |> ewe.enable_tls("", "")
     |> ewe.start
 }
